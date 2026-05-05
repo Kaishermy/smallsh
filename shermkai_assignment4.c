@@ -89,16 +89,36 @@ int main() {
 		else {
 			int spawnPID = fork();
 
-			if (spawnPID == -1) return EXIT_FAILURE;
-			if (spawnPID == 0) {
-				execvp(command, curr_command->argv);
-				perror("execvp");
+			if (spawnPID == -1) { // Failure
 				exitStatus = 1;
+				exit(EXIT_FAILURE);
+			}
+			if (spawnPID == 0) { // Success
+				if (curr_command->input_file != NULL) {
+					// Open for reading only
+					int sourceFD = open(curr_command->output_file, O_RDONLY, 0640);
+
+					// Check if file open fails. Redirect if file opens successfully.
+					if (sourceFD == -1 || dup2(sourceFD, 0) == -1) exitStatus = 1;
+					close(sourceFD);
+				}
+				if (curr_command->output_file != NULL) {
+					// Open for writing only and either truncated or created
+					int targetFD = open(curr_command->output_file, O_WRONLY | O_CREAT | O_TRUNC, 0640);
+
+					// Check if file open fails. Redirect if file opens successfully.
+					if (targetFD == -1 || dup2(targetFD, 1) == -1) exitStatus = 1;
+					close(targetFD);
+				}
+
+				// Run and cleanup child process
+				execvp(command, curr_command->argv);
+				exitStatus = 0;
 				exit(EXIT_SUCCESS);
 			}
 			else {
 				int childStatus;
-				waitpid(spawnPID, &childStatus, 0);
+				waitpid(spawnPID, &childStatus, 0); // Wait for child completion before moving on
 			}
 		}
 	}
