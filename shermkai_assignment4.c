@@ -86,7 +86,7 @@ int main() {
 			printf("exit value %d\n", exitStatus);
 			fflush(stdout);
 		}
-		else if (strcmp(command, "ls") == 0) {
+		else {
 			int spawnPID = fork();
 
 			if (spawnPID == -1) return EXIT_FAILURE;
@@ -94,6 +94,7 @@ int main() {
 				execvp(command, curr_command->argv);
 				perror("execvp");
 				exitStatus = 1;
+				exit(EXIT_SUCCESS);
 			}
 			else {
 				int childStatus;
