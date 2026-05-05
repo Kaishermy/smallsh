@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <dirent.h>
 #include <sys/stat.h>
+#include <sys/wait.h> 
 #include <fcntl.h>
 #include <unistd.h>
 #include <time.h>
@@ -56,7 +57,6 @@ struct command_line* parse_input() {
 int main() {
 	struct command_line* curr_command;
 	char* command;
-	char* newPath;
 	int exitStatus = 0;
 
 	while (true) {
@@ -72,6 +72,8 @@ int main() {
 			break;
 		}
 		else if (strcmp(command, "cd") == 0) {
+			char* newPath;
+
 			if (curr_command->argv[1] == NULL) {
 				newPath = getenv("HOME"); // Default to dir in HOME env var
 			}
@@ -83,6 +85,20 @@ int main() {
 		else if (strcmp(command, "status") == 0) {
 			printf("exit value %d\n", exitStatus);
 			fflush(stdout);
+		}
+		else if (strcmp(command, "ls") == 0) {
+			int spawnPID = fork();
+
+			if (spawnPID == -1) return EXIT_FAILURE;
+			if (spawnPID == 0) {
+				execvp(command, curr_command->argv);
+				perror("execvp");
+				exitStatus = 1;
+			}
+			else {
+				int childStatus;
+				waitpid(spawnPID, &childStatus, 0);
+			}
 		}
 	}
 
