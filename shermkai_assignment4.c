@@ -1,0 +1,91 @@
+#include <stdio.h>
+#include <stdlib.h> // for EXIT_SUCCESS and EXIT_FAILURE
+#include <string.h>
+#include <stdbool.h>
+#include <dirent.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <time.h>
+
+// Adapted from Programming Assignment 4 sample parser code
+#define INPUT_LENGTH 2048
+#define MAX_ARGS 512
+
+// Adapted from Programming Assignment 4 sample parser code
+struct command_line {
+	char* argv[MAX_ARGS + 1];
+	int argc;
+	char* input_file;
+	char* output_file;
+	bool is_bg;
+};
+
+// Adapted from Programming Assignment 4 sample parser code
+struct command_line* parse_input() {
+	char input[INPUT_LENGTH];
+	struct command_line* curr_command = (struct command_line*)calloc(1,
+		sizeof(struct command_line));
+
+	// Get input
+	printf(": ");
+	fflush(stdout);
+	fgets(input, INPUT_LENGTH, stdin);
+
+	// Tokenize the input
+	char* token = strtok(input, " \n");
+	while (token) {
+		if (!strcmp(token, "<")) {
+			curr_command->input_file = strdup(strtok(NULL, " \n"));
+		}
+		else if (!strcmp(token, ">")) {
+			curr_command->output_file = strdup(strtok(NULL, " \n"));
+		}
+		else if (!strcmp(token, "&")) {
+			curr_command->is_bg = true;
+		}
+		else {
+			curr_command->argv[curr_command->argc++] = strdup(token);
+		}
+		token = strtok(NULL, " \n");
+	}
+
+	return curr_command;
+}
+
+int main() {
+	struct command_line* curr_command;
+	char* command;
+	char* newPath;
+	int exitStatus = 0;
+
+	while (true) {
+		curr_command = parse_input();
+		command = curr_command->argv[0];
+
+		// Re-prompt if nothing entered or comment entered
+		if (command == NULL || strncmp(command, "#", 1) == 0) {
+			continue;
+		}
+		else if (strcmp(command, "exit") == 0) {
+			// TODO: Kill all processes/jobs and terminate
+			break;
+		}
+		else if (strcmp(command, "cd") == 0) {
+			if (curr_command->argv[1] == NULL) {
+				newPath = getenv("HOME"); // Default to dir in HOME env var
+			}
+			else {
+				newPath = curr_command->argv[1];
+			}
+			chdir(newPath);
+		}
+		else if (strcmp(command, "status") == 0) {
+			printf("exit value %d\n", exitStatus);
+			fflush(stdout);
+		}
+	}
+
+	return EXIT_SUCCESS;
+
+}
