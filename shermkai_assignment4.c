@@ -71,11 +71,11 @@ void handle_SIGTSTP(int sigNum) {
 	isFGOnly = !isFGOnly;
 	if (isFGOnly) {
 		char* message = "\nEntering foreground-only mode (& is now ignored)\n";
-		write(STDOUT_FILENO, message, 50);
+		write(STDOUT_FILENO, message, 51);
 	}
 	else {
 		char* message = "\nExiting foreground-only mode\n";
-		write(STDOUT_FILENO, message, 30);
+		write(STDOUT_FILENO, message, 31);
 	}
 }
 
@@ -116,7 +116,12 @@ int main() {
 			continue;
 		}
 		else if (strcmp(command, "exit") == 0) {
-			// TODO: Kill all processes/jobs and terminate
+			int currChildStatus;
+			for (int i = 0; i < MAX_ARGS + 1; i++) {
+				if (bgPIDs[i] != 0 && bgPIDs[i] != -5) {
+					kill(bgPIDs[i], SIGTERM);
+				}
+			}
 			break;
 		}
 		else if (strcmp(command, "cd") == 0) {
@@ -161,14 +166,22 @@ int main() {
 					int sourceFD = open(curr_command->input_file, O_RDONLY, 0640);
 
 					// Check if file open fails. Redirect if file opens successfully.
-					if (sourceFD == -1 || dup2(sourceFD, 0) == -1) exitStatus = 1;
+					if (sourceFD == -1 || dup2(sourceFD, 0) == -1) {
+						printf("cannot open %s for input\n", curr_command->input_file);
+						fflush(stdout);
+						exitStatus = 1;
+					}
 				}
 				if (curr_command->output_file != NULL) {
 					// Open for writing only and either truncated or created
 					int targetFD = open(curr_command->output_file, O_WRONLY | O_CREAT | O_TRUNC, 0640);
 
 					// Check if file open fails. Redirect if file opens successfully.
-					if (targetFD == -1 || dup2(targetFD, 1) == -1) exitStatus = 1;
+					if (targetFD == -1 || dup2(targetFD, 1) == -1) {
+						printf("cannot open %s for output\n", curr_command->output_file);
+						fflush(stdout);
+						exitStatus = 1;
+					}
 				}
 
 				// Run child process
@@ -209,7 +222,7 @@ int main() {
 			}
 		}
 
-		// Go through each running PID, check if it's process terminated, and kill it if so
+		// Go through each running PID, check if its process terminated, and reset its value
 		int currChildStatus;
 		for (int i = 0; i < MAX_ARGS + 1; i++) {
 			if (waitpid(bgPIDs[i], &currChildStatus, WNOHANG) > 0) {
