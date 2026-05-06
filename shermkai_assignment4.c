@@ -66,7 +66,7 @@ struct command_line* parse_input() {
 	return curr_command;
 }
 
-// Handle ctrl-z input from 
+// Toggle foreground-only mode when ctrl-z pressed
 void handle_SIGTSTP(int sigNum) {
 	isFGOnly = !isFGOnly;
 	if (isFGOnly) {
@@ -76,6 +76,26 @@ void handle_SIGTSTP(int sigNum) {
 	else {
 		char* message = "\nExiting foreground-only mode\n";
 		write(STDOUT_FILENO, message, 31);
+	}
+}
+
+// Go through each running PID, check if its process terminated, and reset its value
+void checkPIDs(int arrPIDs[]) {
+	int currChildStatus;
+	for (int i = 0; i < MAX_ARGS + 1; i++) {
+		if (waitpid(arrPIDs[i], &currChildStatus, WNOHANG) > 0) {
+			if (WIFSIGNALED(currChildStatus)) { // Terminated by signal
+				printf("background pid %d is done: terminated by signal %d\n",
+					arrPIDs[i], WTERMSIG(currChildStatus));
+				fflush(stdout);
+			}
+			else { // Normal termination
+				printf("background pid %d is done: exit value %d\n",
+					arrPIDs[i], WEXITSTATUS(currChildStatus));
+				fflush(stdout);
+			}
+			arrPIDs[i] = PID_DEFAULT;
+		}
 	}
 }
 
@@ -113,6 +133,7 @@ int main() {
 
 		// Re-prompt if nothing entered or comment entered
 		if (command == NULL || strncmp(command, "#", 1) == 0) {
+			checkPIDs(bgPIDs); // Check PID statuses
 			continue;
 		}
 		else if (strcmp(command, "exit") == 0) {
@@ -170,6 +191,7 @@ int main() {
 						printf("cannot open %s for input\n", curr_command->input_file);
 						fflush(stdout);
 						exitStatus = 1;
+						exit(EXIT_FAILURE);
 					}
 				}
 				if (curr_command->output_file != NULL) {
@@ -181,12 +203,14 @@ int main() {
 						printf("cannot open %s for output\n", curr_command->output_file);
 						fflush(stdout);
 						exitStatus = 1;
+						exit(EXIT_FAILURE);
 					}
 				}
 
 				// Run child process
 				sigaction(SIGTSTP, &ignoreSIGTSTP, NULL);// Ignore ctrl-z
 				execvp(command, curr_command->argv);
+				perror(command);
 				exitStatus = 1;
 				exit(EXIT_FAILURE);
 			}
@@ -222,15 +246,7 @@ int main() {
 			}
 		}
 
-		// Go through each running PID, check if its process terminated, and reset its value
-		int currChildStatus;
-		for (int i = 0; i < MAX_ARGS + 1; i++) {
-			if (waitpid(bgPIDs[i], &currChildStatus, WNOHANG) > 0) {
-				printf("background pid %d is done: exit value %d\n", bgPIDs[i], exitStatus);
-				fflush(stdout);
-				bgPIDs[i] = PID_DEFAULT;
-			}
-		}
+		checkPIDs(bgPIDs);
 	}
 
 	return EXIT_SUCCESS;
