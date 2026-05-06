@@ -2,9 +2,11 @@
 #include <stdlib.h> // for EXIT_SUCCESS and EXIT_FAILURE
 #include <string.h>
 #include <stdbool.h>
+#include <signal.h>
 #include <dirent.h>
 #include <sys/stat.h>
 #include <sys/wait.h> 
+#include <sys/types.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <time.h>
@@ -63,8 +65,16 @@ int main() {
 	int bgDefaultInFD = open("/dev/null", O_RDONLY, 0640);
 	int bgDefaultOutFD = open("/dev/null", O_WRONLY | O_CREAT | O_TRUNC, 0640);
 
+	// Set up child PID array
 	int bgPIDs[MAX_ARGS + 1] = { 0 }; // The PIDs of any currently running background processes
 	for (int i = 0; i < MAX_ARGS + 1; i++) bgPIDs[i] = PID_DEFAULT; // Fill w/ -5 to avoid accidental PID hits
+
+	// Set up ignore SIGINT
+	struct sigaction ignoreAction = { 0 };    // Ignore ctrl-c terminate behavior
+	struct sigaction notIgnoreAction = { 0 }; // ctrl-c terminate behavior
+	ignoreAction.sa_handler = SIG_IGN;
+	notIgnoreAction.sa_handler = SIG_DFL; 
+	sigaction(SIGINT, &ignoreAction, NULL); // Ignore ctrl-c by default
 
 	while (true) {
 		curr_command = parse_input();
@@ -112,6 +122,7 @@ int main() {
 						dup2(bgDefaultOutFD, 1);
 					}
 				}
+				else sigaction(SIGINT, &notIgnoreAction, NULL); // Un-ignore ctrl-c ignore
 
 				// Handle specified redirects
 				if (curr_command->input_file != NULL) {
@@ -141,6 +152,15 @@ int main() {
 				// whether the child process is a foreground or background process
 				if (!curr_command->is_bg) { // Child is a foreground process
 					waitpid(spawnPID, &childStatus, 0);
+
+					if (WIFSIGNALED(childStatus)) { // Child killed by ctrl-c
+						printf("terminated by signal %d\n", WTERMSIG(childStatus));
+						fflush(stdout);
+						exitStatus = 1;
+					}
+					else { // Child killed by anything else
+						exitStatus = WEXITSTATUS(childStatus);
+					}
 				}
 				else { // Child is background process
 					printf("background pid is %d\n", spawnPID);
