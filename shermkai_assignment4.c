@@ -38,6 +38,13 @@ struct command_line* parse_input() {
 	fflush(stdout);
 	fgets(input, INPUT_LENGTH, stdin);
 
+	// Flush stdin if ctrl-z is pressed. Omitting this causes the terminal
+	// to just dump previous output alongside the FG-only mode message.
+	if (input[0] == '\0') {
+		fflush(stdout);
+		return curr_command;
+	}
+
 	// Tokenize the input
 	char* token = strtok(input, " \n");
 	while (token) {
@@ -63,11 +70,11 @@ struct command_line* parse_input() {
 void handle_SIGTSTP(int sigNum) {
 	isFGOnly = !isFGOnly;
 	if (isFGOnly) {
-		char* message = "Entering foreground-only mode (& is now ignored)\n";
+		char* message = "\nEntering foreground-only mode (& is now ignored)\n";
 		write(STDOUT_FILENO, message, 50);
 	}
 	else {
-		char* message = "Exiting foreground-only mode\n";
+		char* message = "\nExiting foreground-only mode\n";
 		write(STDOUT_FILENO, message, 30);
 	}
 }
@@ -96,6 +103,7 @@ int main() {
 	struct sigaction notIgnoreSIGTSTP = { 0 };   // Don't ignore ctrl-z behavior
 	ignoreSIGTSTP.sa_handler = SIG_IGN;
 	notIgnoreSIGTSTP.sa_handler = handle_SIGTSTP;
+	notIgnoreSIGTSTP.sa_flags = SA_RESTART;
 	sigaction(SIGTSTP, &notIgnoreSIGTSTP, NULL); // Don't ignore ctrl-z by default
 
 	while (true) {
