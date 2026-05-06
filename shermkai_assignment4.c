@@ -142,8 +142,8 @@ int main() {
 
 				// Run child process
 				execvp(command, curr_command->argv);
-				exitStatus = 0;
-				exit(EXIT_SUCCESS);
+				exitStatus = 1;
+				exit(EXIT_FAILURE);
 			}
 			else { // Parent Process
 				int childStatus;
