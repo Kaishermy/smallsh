@@ -16,6 +16,8 @@
 #define MAX_ARGS 512
 #define PID_DEFAULT -5
 
+bool isFGOnly = false;
+
 // Adapted from Programming Assignment 4 sample parser code
 struct command_line {
 	char* argv[MAX_ARGS + 1];
@@ -57,6 +59,19 @@ struct command_line* parse_input() {
 	return curr_command;
 }
 
+// Handle ctrl-z input from 
+void handle_SIGTSTP(int sigNum) {
+	isFGOnly = !isFGOnly;
+	if (isFGOnly) {
+		char* message = "Entering foreground-only mode (& is now ignored)\n";
+		write(STDOUT_FILENO, message, 50);
+	}
+	else {
+		char* message = "Exiting foreground-only mode\n";
+		write(STDOUT_FILENO, message, 30);
+	}
+}
+
 int main() {
 	struct command_line* curr_command;
 	char* command;
@@ -70,15 +85,23 @@ int main() {
 	for (int i = 0; i < MAX_ARGS + 1; i++) bgPIDs[i] = PID_DEFAULT; // Fill w/ -5 to avoid accidental PID hits
 
 	// Set up ignore SIGINT
-	struct sigaction ignoreAction = { 0 };    // Ignore ctrl-c terminate behavior
-	struct sigaction notIgnoreAction = { 0 }; // ctrl-c terminate behavior
-	ignoreAction.sa_handler = SIG_IGN;
-	notIgnoreAction.sa_handler = SIG_DFL; 
-	sigaction(SIGINT, &ignoreAction, NULL); // Ignore ctrl-c by default
+	struct sigaction ignoreSIGINT = { 0 };    // Ignore ctrl-c terminate behavior
+	struct sigaction notIgnoreSIGINT = { 0 }; // Don't ignore ctrl-c terminate behavior
+	ignoreSIGINT.sa_handler = SIG_IGN;
+	notIgnoreSIGINT.sa_handler = SIG_DFL;
+	sigaction(SIGINT, &ignoreSIGINT, NULL);   // Ignore ctrl-c by default
+
+	// Set up ignore SIGTSTP
+	struct sigaction ignoreSIGTSTP = { 0 };      // Ignore ctrl-z behavior
+	struct sigaction notIgnoreSIGTSTP = { 0 };   // Don't ignore ctrl-z behavior
+	ignoreSIGTSTP.sa_handler = SIG_IGN;
+	notIgnoreSIGTSTP.sa_handler = handle_SIGTSTP;
+	sigaction(SIGTSTP, &notIgnoreSIGTSTP, NULL); // Don't ignore ctrl-z by default
 
 	while (true) {
 		curr_command = parse_input();
 		command = curr_command->argv[0];
+		if (isFGOnly) curr_command->is_bg = false;
 
 		// Re-prompt if nothing entered or comment entered
 		if (command == NULL || strncmp(command, "#", 1) == 0) {
@@ -122,7 +145,7 @@ int main() {
 						dup2(bgDefaultOutFD, 1);
 					}
 				}
-				else sigaction(SIGINT, &notIgnoreAction, NULL); // Un-ignore ctrl-c ignore
+				else sigaction(SIGINT, &notIgnoreSIGINT, NULL); // Un-ignore ctrl-c ignore
 
 				// Handle specified redirects
 				if (curr_command->input_file != NULL) {
@@ -141,6 +164,7 @@ int main() {
 				}
 
 				// Run child process
+				sigaction(SIGTSTP, &ignoreSIGTSTP, NULL);// Ignore ctrl-z
 				execvp(command, curr_command->argv);
 				exitStatus = 1;
 				exit(EXIT_FAILURE);
